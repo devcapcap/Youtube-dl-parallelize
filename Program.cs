@@ -3,16 +3,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Reflection;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace Youtube_dl_parallelize
+namespace Youtubedlparallelize
 {
-    class Program
+    sealed class Program
     {
-        //const string urlsList = @"power_links.txt";
         const string Exec = "youtube-dl.exe";
         static void Usage()
         {
@@ -31,14 +29,14 @@ namespace Youtube_dl_parallelize
                 string urlsList = null;
                 if ( args.Length == 0 
                     || (string.IsNullOrWhiteSpace(args[0])
-                    && !File.Exists((urlsList = args[0]))))
+                    && !File.Exists(args[0])))
                 {
                     Console.WriteLine($"{urlsList} can't not be found");
                     Usage();
                     return;
                 }
-                
-                RunAscyn(urlsList).Wait();
+                urlsList = args[0];
+                RunAsync(urlsList).Wait();
             }
             catch (Exception ex)
             {
@@ -49,36 +47,55 @@ namespace Youtube_dl_parallelize
             Console.ReadLine();
         }
 
-        private async static Task<int> RunAscyn(string filePath)
+        private static Task<Process> RunProcessAsync(string exeFile,string arguments=null,
+                                                    string workingDirecty = null,CancellationToken cancellationToken = default(CancellationToken))
+        {
+            TaskCompletionSource<Process> taskCompletionSource = new TaskCompletionSource<Process>();
+            Process process = new Process()
+            {
+                StartInfo = new ProcessStartInfo()
+                {
+                    FileName = exeFile,
+                    UseShellExecute = false,
+                    CreateNoWindow = false,
+                    Arguments = arguments,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    WorkingDirectory = workingDirecty
+                },
+                EnableRaisingEvents = true
+            };
+            process.Exited += (s, e) => {
+                taskCompletionSource.SetResult(process);
+            };
+            cancellationToken.ThrowIfCancellationRequested();
+
+            process.Start();
+
+            cancellationToken.Register(() => {
+                process.CloseMainWindow();
+            });
+
+            return taskCompletionSource.Task;
+        }
+        private static async Task<int> RunAsync(string filePath)
         {
             if (!File.Exists(filePath))
             {
                 throw new ArgumentException($"{filePath} doesn't exit.");
             }
-            IEnumerable<string> lines = File.ReadLines(filePath).Where(l=> !string.IsNullOrWhiteSpace(l) );
+            IEnumerable<string> lines = File.ReadLines(filePath).Where(l => !string.IsNullOrWhiteSpace(l));
             if (!lines.Any())
                 return 0;
 
-            List<Task> task = new List<Task>();
-            for( int i = 0; i < lines.Count(); ++i)
+            Task<Process>[] tasks = new Task<Process>[lines.Count()];
+            for (int i = 0; i < tasks.Length; ++i)
             {
                 int tempI = i;
-                task.Add(Task.Run(() =>
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = Exec,
-                        Arguments = lines.ElementAt(tempI),
-                        CreateNoWindow = false,
-                        UseShellExecute = false,
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        WorkingDirectory = Environment.CurrentDirectory
-                    });//.WaitForExit();
-                }));
+                tasks[tempI] = RunProcessAsync(Exec,lines.ElementAt(tempI),Environment.CurrentDirectory);
             }
             try
             {
-                await Task.WhenAll(task.ToArray());
+                await Task.WhenAll(tasks);
             }
             catch (AggregateException age)
             {
