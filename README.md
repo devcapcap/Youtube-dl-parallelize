@@ -12,3 +12,10 @@ Usage &lt;executable Youtube-dl-parallelize&gt; &lt;file_path_with_urls&gt;  opt
 How to get youtube-dl
 ---------------------
 Go to https://rg3.github.io/youtube-dl/download.html and grab a version for your operating system
+
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. 
+
+You are free to use, modify, and distribute this extension under the terms of this license. For more details, see the `LICENSE` file in the root directory of this repository.
